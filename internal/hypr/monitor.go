@@ -81,6 +81,7 @@ type Monitor struct {
 	AvailableModes        []string  `json:"availableModes"`
 	ActiveWorkspace       Workspace `json:"activeWorkspace"`
 	ConnectorPath         string    `json:"-"`
+	ConnectorOnly         bool      `json:"-"`
 }
 
 func (m Monitor) Bitdepth() int {
@@ -167,6 +168,9 @@ func (m Monitor) ModeString() string {
 }
 
 func (m Monitor) MonitorSelector() string {
+	if m.ConnectorOnly {
+		return strings.TrimSpace(m.Name)
+	}
 	if desc := strings.TrimSpace(m.Description); desc != "" {
 		return "desc:" + desc
 	}

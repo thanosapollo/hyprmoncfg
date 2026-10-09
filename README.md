@@ -147,6 +147,30 @@ The daemon scores every profile in `~/.config/hyprmoncfg/profiles/`, so delete t
 
 Newly connected displays extend the matching layout to the right, touching its rightmost display. Automatically extended layouts appear as unsaved drafts in the editor and panel; save one to name and reuse it. Workspace planning follows the profile's settings, or defaults to sequential groups of three across nine workspaces when planning was disabled. In the TUI, press `U` to toggle disabling displays outside the profile, then save. The corresponding profile JSON setting is `disable_unknown_outputs` (default `false`). Displays explicitly saved as disabled stay disabled.
 
+### Exclude externally managed outputs
+
+Set `HYPRMONCFG_IGNORE_OUTPUTS` to comma-separated connector-name globs when
+another tool owns virtual or headless outputs. For example:
+
+```sh
+HYPRMONCFG_IGNORE_OUTPUTS='LAB,HEADLESS-*,WAYLAND-*' hyprmoncfgd
+```
+
+Names are case-sensitive and globs use Go's `filepath.Match` syntax. Empty
+entries or invalid patterns are rejected at startup. With the variable unset,
+existing behavior is unchanged, including automatic exclusion of `FALLBACK`.
+Ignored outputs are removed at the shared monitor-query and hotplug-event
+boundary, so polling, matching, capture, recovery and both frontends do not
+manage them. Workspace placements and rules targeting ignored outputs are
+excluded from capture and rollback. Ambiguous description rules spanning both
+managed and ignored heads are rejected. With exclusions configured, generated
+selectors use connector names while hardware identity remains unchanged.
+Do not include physical connectors that hyprmoncfg should manage.
+Set the same variable for direct CLI/TUI commands and in the daemon's user
+service environment. Restarting the daemon reapplies its profile and may hand
+ownership to Omarchy's watcher briefly; changing this setting is not guaranteed
+to preserve live layout or focus during restart.
+
 On Omarchy versions that launch `omarchy-hyprland-monitor-watch`, `hyprmoncfgd` stops that exact transient user scope while it owns monitor profiles and restores the watcher when the daemon exits during a live Hyprland session. Generated configuration used without the daemon cannot provide this runtime ownership; static-config users must disable the Omarchy watcher separately.
 
 Omarchy's lock/wake script reads `~/.config/hypr/monitors.lua` directly, before its remembered scale. To prevent it from resetting the laptop's scale and position, hyprmoncfg keeps a marked, connector-specific wake rule at the top of that file, alongside Omarchy's remembered scale. Your existing rules and defaults stay intact. Canceling a preview restores the previous wake settings; turning management off removes the marked block. Read-only dotfiles are left alone with a diagnostic. Omarchy still controls lid recovery and uses its preferred mode when re-enabling an entirely disabled panel; hyprmoncfg then restores the full profile.

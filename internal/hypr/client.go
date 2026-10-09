@@ -39,7 +39,8 @@ type instanceInfo struct {
 }
 
 type Client struct {
-	hyprctl string
+	hyprctl        string
+	ignoredOutputs []string
 }
 
 func NewClient() (*Client, error) {
@@ -47,10 +48,25 @@ func NewClient() (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("hyprctl not found in PATH")
 	}
-	return &Client{hyprctl: path}, nil
+	patterns, err := parseIgnoredOutputs(os.Getenv("HYPRMONCFG_IGNORE_OUTPUTS"))
+	if err != nil {
+		return nil, err
+	}
+	return &Client{hyprctl: path, ignoredOutputs: patterns}, nil
 }
 
 func (c *Client) Monitors(ctx context.Context) ([]Monitor, error) {
+	monitors, err := c.queryMonitors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	monitors = c.filterIgnoredOutputs(dropSyntheticMonitors(monitors))
+	normalizeMirrorTargets(monitors)
+	enrichMonitorConnectorPaths(monitors)
+	return monitors, nil
+}
+
+func (c *Client) queryMonitors(ctx context.Context) ([]Monitor, error) {
 	cmd, err := c.commandContext(ctx, "-j", "monitors", "all")
 	if err != nil {
 		return nil, err
@@ -63,9 +79,6 @@ func (c *Client) Monitors(ctx context.Context) ([]Monitor, error) {
 	if err := json.Unmarshal(out, &monitors); err != nil {
 		return nil, fmt.Errorf("failed to decode hyprctl monitors JSON: %w", err)
 	}
-	monitors = dropSyntheticMonitors(monitors)
-	normalizeMirrorTargets(monitors)
-	enrichMonitorConnectorPaths(monitors)
 	return monitors, nil
 }
 
@@ -133,7 +146,13 @@ func (c *Client) Workspaces(ctx context.Context) ([]WorkspaceState, error) {
 	if err := json.Unmarshal(out, &workspaces); err != nil {
 		return nil, fmt.Errorf("failed to decode hyprctl workspaces JSON: %w", err)
 	}
-	return workspaces, nil
+	filtered := workspaces[:0]
+	for _, workspace := range workspaces {
+		if !c.ignoredOutput(workspace.Monitor) {
+			filtered = append(filtered, workspace)
+		}
+	}
+	return filtered, nil
 }
 
 func (c *Client) WorkspaceRules(ctx context.Context) ([]WorkspaceRule, error) {
@@ -148,6 +167,13 @@ func (c *Client) WorkspaceRules(ctx context.Context) ([]WorkspaceRule, error) {
 	var rules []WorkspaceRule
 	if err := json.Unmarshal(out, &rules); err != nil {
 		return nil, fmt.Errorf("failed to decode hyprctl workspace rules JSON: %w", err)
+	}
+	if len(c.ignoredOutputs) > 0 {
+		monitors, err := c.queryMonitors(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return c.filterWorkspaceRules(rules, monitors)
 	}
 	return rules, nil
 }
@@ -440,7 +466,7 @@ func (c *Client) SubscribeMonitorEvents(ctx context.Context) (<-chan Event, <-ch
 			if line == "" {
 				continue
 			}
-			event, ok := parseEvent(line)
+			event, ok := c.monitorEvent(line)
 			if !ok {
 				continue
 			}

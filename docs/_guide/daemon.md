@@ -16,6 +16,19 @@ On Omarchy releases that start `omarchy-hyprland-monitor-watch`, the daemon take
 
 This is especially useful if you move between setups regularly. A conference projector, a coworking space monitor, your desk at home -- each one has different resolution, position, and scale requirements. Save a profile once, and the daemon takes care of it from then on.
 
+## Externally managed virtual outputs
+
+Set `HYPRMONCFG_IGNORE_OUTPUTS='LAB,HEADLESS-*,WAYLAND-*'` in the daemon's
+service environment and for direct CLI/TUI commands to exclude those names.
+Patterns are comma-separated, case-sensitive Go `filepath.Match` globs. Invalid
+patterns and empty entries fail startup. Unset means no additional exclusions;
+`FALLBACK` remains excluded automatically. Matching outputs are filtered from
+monitor queries and hotplug events before profile matching, polling, capture
+and recovery. Avoid patterns matching physical outputs you want managed.
+
+Restarting the daemon still reconciles its saved profile and can temporarily
+restore Omarchy's watcher. Exclusions do not make restart layout/focus-neutral.
+
 ## Setup
 
 AUR, Fedora COPR, Nixpkgs, and Gentoo GURU:
